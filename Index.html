@@ -9,19 +9,17 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
-        body { font-family: 'Segoe UI', system-ui, sans-serif; text-align: center; background: #f0f4f8; padding: 15px; color: #1a202c; margin: 0; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f4f8; padding: 15px; color: #1a202c; margin: 0; }
         .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 450px; margin: 10px auto; }
-        .guide { text-align: left; background: #fff9db; padding: 15px; border-radius: 12px; font-size: 0.85rem; margin-bottom: 20px; border-left: 5px solid #fcc419; }
-        .guide h4 { margin-top: 0; color: #856404; }
-        #qrcode { margin: 15px auto; display: flex; justify-content: center; background: white; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
         .btn { background: #4a90e2; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; width: 100%; cursor: pointer; font-size: 1rem; margin-bottom: 10px; transition: 0.2s; }
+        .btn-send { background: #48bb78; display: none; } /* Nascosto finché non c'è un file */
         .btn-scan { background: #6c5ce7; }
-        .btn:active { transform: scale(0.98); }
         #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 15px; display: none; background: #000; }
         .progress-container { display: none; margin-top: 20px; text-align: left; }
         .progress-bg { background: #edf2f7; border-radius: 10px; height: 12px; width: 100%; overflow: hidden; margin-top: 8px; }
-        .progress-fill { background: #48bb78; height: 100%; width: 0%; transition: width 0.1s; }
-        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e0; box-sizing: border-box; text-align: center; font-family: monospace; }
+        .progress-fill { background: #48bb78; height: 100%; width: 0%; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e0; box-sizing: border-box; text-align: center; }
+        #file-info { font-size: 0.85rem; color: #4a5568; margin-bottom: 10px; }
         #download-link { display: block; margin-top: 20px; padding: 15px; background: #d3f9d8; color: #2b8a3e; border-radius: 12px; text-decoration: none; font-weight: bold; }
     </style>
 </head>
@@ -29,26 +27,23 @@
 
     <div class="card">
         <h2>🚀 Touch Share</h2>
-        <div class="guide">
-            <h4>📖 Istruzioni:</h4>
-            <ol>
-                <li>Entrambi aprite la pagina.</li>
-                <li><strong>Inviante:</strong> Scansiona il QR dell'altro.</li>
-                <li><strong>Inviante:</strong> Seleziona il file.</li>
-            </ol>
-        </div>
-
         <div id="qrcode"></div>
-        <p style="font-size: 0.9rem;">Il tuo ID: <strong id="my-id">...</strong></p>
+        <p>Il tuo ID: <strong id="my-id">...</strong></p>
         
         <div id="reader"></div>
         <button id="scan-btn" class="btn btn-scan">📷 1. Scansiona QR</button>
         <input type="text" id="peer-id-input" placeholder="ID Destinatario">
-        <button class="btn" onclick="document.getElementById('file-input').click()">📁 2. Invia File</button>
+        
+        <hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
+
+        <button class="btn" onclick="document.getElementById('file-input').click()">📁 2. Scegli File</button>
         <input type="file" id="file-input" hidden>
+        
+        <div id="file-info">Nessun file selezionato</div>
+        <button id="send-btn" class="btn btn-send">📤 3. Invia Ora</button>
 
         <div id="progress-area" class="progress-container">
-            <span id="progress-label">Trasferimento in corso...</span>
+            <span id="progress-label">Trasferimento...</span>
             <div class="progress-bg"><div id="progress-fill" class="progress-fill"></div></div>
             <span id="progress-percent" style="font-size: 0.8rem; float: right;">0%</span>
         </div>
@@ -58,21 +53,26 @@
 <script>
     const peer = new Peer();
     const peerInput = document.getElementById("peer-id-input");
+    const fileInput = document.getElementById("file-input");
+    const fileInfo = document.getElementById("file-info");
+    const sendBtn = document.getElementById("send-btn");
     const progressArea = document.getElementById("progress-area");
     const progressFill = document.getElementById("progress-fill");
     const progressPercent = document.getElementById("progress-percent");
     const html5QrCode = new Html5Qrcode("reader");
 
+    let selectedFile = null;
+
     peer.on('open', id => {
         document.getElementById('my-id').innerText = id;
         const shareUrl = `${window.location.origin}${window.location.pathname}?target=${id}`;
-        new QRCode(document.getElementById("qrcode"), { text: shareUrl, width: 160, height: 160 });
+        new QRCode(document.getElementById("qrcode"), { text: shareUrl, width: 140, height: 140 });
     });
 
+    // RICEZIONE
     peer.on('connection', conn => {
         let receivedChunks = [];
         let metadata = {};
-
         conn.on('data', data => {
             if (data.type === 'start') {
                 progressArea.style.display = 'block';
@@ -80,58 +80,80 @@
                 metadata = { name: data.name, mime: data.mime };
             } else if (data.type === 'chunk') {
                 receivedChunks.push(data.payload);
-                const p = Math.floor((data.current / data.total) * 100);
-                updateProgress(p);
+                updateProgress(Math.floor((data.current / data.total) * 100));
             } else if (data.type === 'end') {
                 const blob = new Blob(receivedChunks, { type: metadata.mime || 'application/octet-stream' });
                 showDownload(URL.createObjectURL(blob), metadata.name);
                 progressArea.style.display = 'none';
-                new Audio('https://actions.google.com/sounds/v1/communication/notification_high_intensity.ogg').play().catch(() => {});
+                new Audio('https://actions.google.com/sounds/v1/communication/notification_high_intensity.ogg').play().catch(()=>{});
             }
         });
     });
 
-    document.getElementById('file-input').onchange = (e) => {
-        const file = e.target.files[0];
-        const targetId = peerInput.value;
-        if (!file || !targetId) return alert("Dati mancanti!");
+    // SELEZIONE FILE
+    fileInput.onchange = (e) => {
+        selectedFile = e.target.files[0];
+        if (selectedFile) {
+            fileInfo.innerText = `File: ${selectedFile.name} (${(selectedFile.size/1024/1024).toFixed(2)} MB)`;
+            sendBtn.style.display = 'block';
+        }
+    };
 
+    // INVIO FILE
+    sendBtn.onclick = () => {
+        const targetId = peerInput.value;
+        if (!selectedFile || !targetId) return alert("Seleziona file e scansiona destinatario!");
+
+        sendBtn.disabled = true;
+        sendBtn.innerText = "Connessione...";
+        
         const conn = peer.connect(targetId, { reliable: true });
+
         conn.on('open', () => {
+            sendBtn.innerText = "Inviando...";
             progressArea.style.display = 'block';
             let offset = 0;
             const chunkSize = 16384 * 2;
-            conn.send({ type: 'start', name: file.name, mime: file.type });
+            
+            conn.send({ type: 'start', name: selectedFile.name, mime: selectedFile.type });
 
             const readSlice = () => {
-                if (offset >= file.size) {
+                if (offset >= selectedFile.size) {
                     conn.send({ type: 'end' });
                     progressArea.style.display = 'none';
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = "Inviato!";
+                    setTimeout(() => { sendBtn.innerText = "📤 3. Invia Ora"; }, 2000);
                     return;
                 }
 
-                // Controllo Backpressure: evita saturazione buffer
                 if (conn.dataChannel.bufferedAmount > 1024 * 1024) {
                     setTimeout(readSlice, 50);
                     return;
                 }
 
-                const slice = file.slice(offset, offset + chunkSize);
+                const slice = selectedFile.slice(offset, offset + chunkSize);
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     conn.send({ 
                         type: 'chunk', 
                         payload: ev.target.result, 
                         current: offset + ev.target.result.byteLength, 
-                        total: file.size 
+                        total: selectedFile.size 
                     });
                     offset += chunkSize;
-                    updateProgress(Math.floor((Math.min(offset, file.size) / file.size) * 100));
+                    updateProgress(Math.floor((Math.min(offset, selectedFile.size) / selectedFile.size) * 100));
                     readSlice();
                 };
                 reader.readAsArrayBuffer(slice);
             };
             readSlice();
+        });
+
+        conn.on('error', (err) => {
+            alert("Errore di connessione!");
+            sendBtn.disabled = false;
+            sendBtn.innerText = "📤 3. Invia Ora";
         });
     };
 
