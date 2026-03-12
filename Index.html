@@ -11,24 +11,16 @@
     <style>
         body { font-family: 'Segoe UI', system-ui, sans-serif; text-align: center; background: #f0f4f8; padding: 15px; color: #1a202c; margin: 0; }
         .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 450px; margin: 10px auto; }
-        
-        /* Istruzioni */
         .guide { text-align: left; background: #fff9db; padding: 15px; border-radius: 12px; font-size: 0.85rem; margin-bottom: 20px; border-left: 5px solid #fcc419; }
         .guide h4 { margin-top: 0; color: #856404; }
-        .guide ol { padding-left: 20px; margin-bottom: 0; }
-
         #qrcode { margin: 15px auto; display: flex; justify-content: center; background: white; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
-        
         .btn { background: #4a90e2; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; width: 100%; cursor: pointer; font-size: 1rem; margin-bottom: 10px; transition: 0.2s; }
         .btn-scan { background: #6c5ce7; }
         .btn:active { transform: scale(0.98); }
-
         #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 15px; display: none; background: #000; }
-        
         .progress-container { display: none; margin-top: 20px; text-align: left; }
         .progress-bg { background: #edf2f7; border-radius: 10px; height: 12px; width: 100%; overflow: hidden; margin-top: 8px; }
         .progress-fill { background: #48bb78; height: 100%; width: 0%; transition: width 0.1s; }
-        
         input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e0; box-sizing: border-box; text-align: center; font-family: monospace; }
         #download-link { display: block; margin-top: 20px; padding: 15px; background: #d3f9d8; color: #2b8a3e; border-radius: 12px; text-decoration: none; font-weight: bold; }
     </style>
@@ -37,39 +29,29 @@
 
     <div class="card">
         <h2>🚀 Touch Share</h2>
-        
         <div class="guide">
-            <h4>📖 Come scambiare file:</h4>
+            <h4>📖 Istruzioni:</h4>
             <ol>
-                <li>Entrambi aprite questa pagina.</li>
-                <li><strong>Chi invia:</strong> Clicca "Scansiona QR" e inquadra il codice dell'altro.</li>
-                <li><strong>Chi invia:</strong> Seleziona il file e attendi l'invio.</li>
-                <li><strong>Chi riceve:</strong> Clicca il link verde che apparirà per scaricare.</li>
+                <li>Entrambi aprite la pagina.</li>
+                <li><strong>Inviante:</strong> Scansiona il QR dell'altro.</li>
+                <li><strong>Inviante:</strong> Seleziona il file.</li>
             </ol>
         </div>
 
-        <p style="font-size: 0.8rem; color: #718096; margin-bottom: 5px;">Il tuo codice ricezione:</p>
         <div id="qrcode"></div>
-        <p style="font-size: 0.9rem;">ID: <strong id="my-id">...</strong></p>
+        <p style="font-size: 0.9rem;">Il tuo ID: <strong id="my-id">...</strong></p>
         
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-
         <div id="reader"></div>
-        <button id="scan-btn" class="btn btn-scan">📷 1. Scansiona QR Code</button>
-
-        <input type="text" id="peer-id-input" placeholder="ID Destinatario (automatico con QR)">
-
-        <button class="btn" onclick="document.getElementById('file-input').click()">📁 2. Scegli e Invia File</button>
+        <button id="scan-btn" class="btn btn-scan">📷 1. Scansiona QR</button>
+        <input type="text" id="peer-id-input" placeholder="ID Destinatario">
+        <button class="btn" onclick="document.getElementById('file-input').click()">📁 2. Invia File</button>
         <input type="file" id="file-input" hidden>
 
         <div id="progress-area" class="progress-container">
-            <span id="progress-label">Trasferimento...</span>
-            <div class="progress-bg">
-                <div id="progress-fill" class="progress-fill"></div>
-            </div>
+            <span id="progress-label">Trasferimento in corso...</span>
+            <div class="progress-bg"><div id="progress-fill" class="progress-fill"></div></div>
             <span id="progress-percent" style="font-size: 0.8rem; float: right;">0%</span>
         </div>
-
         <div id="download-area"></div>
     </div>
 
@@ -89,21 +71,22 @@
 
     peer.on('connection', conn => {
         let receivedChunks = [];
-        let fileMetadata = {};
+        let metadata = {};
 
         conn.on('data', data => {
             if (data.type === 'start') {
                 progressArea.style.display = 'block';
                 receivedChunks = [];
-                fileMetadata = { name: data.name, mime: data.mime };
+                metadata = { name: data.name, mime: data.mime };
             } else if (data.type === 'chunk') {
                 receivedChunks.push(data.payload);
-                updateProgress(Math.floor((data.current / data.total) * 100));
+                const p = Math.floor((data.current / data.total) * 100);
+                updateProgress(p);
             } else if (data.type === 'end') {
-                // Utilizzo del tipo MIME corretto per il Blob
-                const blob = new Blob(receivedChunks, { type: fileMetadata.mime || 'application/octet-stream' });
-                showDownload(URL.createObjectURL(blob), fileMetadata.name);
+                const blob = new Blob(receivedChunks, { type: metadata.mime || 'application/octet-stream' });
+                showDownload(URL.createObjectURL(blob), metadata.name);
                 progressArea.style.display = 'none';
+                new Audio('https://actions.google.com/sounds/v1/communication/notification_high_intensity.ogg').play().catch(() => {});
             }
         });
     });
@@ -111,75 +94,65 @@
     document.getElementById('file-input').onchange = (e) => {
         const file = e.target.files[0];
         const targetId = peerInput.value;
-        if (!file || !targetId) return alert("Scansiona prima il QR o inserisci l'ID!");
+        if (!file || !targetId) return alert("Dati mancanti!");
 
-        const conn = peer.connect(targetId);
+        const conn = peer.connect(targetId, { reliable: true });
         conn.on('open', () => {
             progressArea.style.display = 'block';
             let offset = 0;
-            const chunkSize = 16384;
-            
-            // Inviamo i metadati subito all'inizio
+            const chunkSize = 16384 * 2;
             conn.send({ type: 'start', name: file.name, mime: file.type });
 
-            const readSlice = (o) => {
-                const slice = file.slice(offset, o + chunkSize);
+            const readSlice = () => {
+                if (offset >= file.size) {
+                    conn.send({ type: 'end' });
+                    progressArea.style.display = 'none';
+                    return;
+                }
+
+                // Controllo Backpressure: evita saturazione buffer
+                if (conn.dataChannel.bufferedAmount > 1024 * 1024) {
+                    setTimeout(readSlice, 50);
+                    return;
+                }
+
+                const slice = file.slice(offset, offset + chunkSize);
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = (ev) => {
                     conn.send({ 
                         type: 'chunk', 
-                        payload: event.target.result, 
-                        current: offset + event.target.result.byteLength, 
+                        payload: ev.target.result, 
+                        current: offset + ev.target.result.byteLength, 
                         total: file.size 
                     });
                     offset += chunkSize;
                     updateProgress(Math.floor((Math.min(offset, file.size) / file.size) * 100));
-                    if (offset < file.size) {
-                        readSlice(offset);
-                    } else {
-                        conn.send({ type: 'end' });
-                        progressArea.style.display = 'none';
-                        alert("Inviato con successo!");
-                    }
+                    readSlice();
                 };
                 reader.readAsArrayBuffer(slice);
             };
-            readSlice(0);
+            readSlice();
         });
     };
 
     function updateProgress(p) {
-        const safeP = p > 100 ? 100 : p;
-        progressFill.style.width = safeP + "%";
-        progressPercent.innerText = safeP + "%";
+        progressFill.style.width = p + "%";
+        progressPercent.innerText = p + "%";
     }
 
     function showDownload(url, name) {
         const area = document.getElementById('download-area');
-        area.innerHTML = `<a id="download-link" href="${url}" download="${name}">🎁 Ricevuto! Clicca per scaricare: ${name}</a>`;
+        area.innerHTML = `<a id="download-link" href="${url}" download="${name}">🎁 Scarica: ${name}</a>`;
     }
 
-    // Gestione Scanner QR
     document.getElementById('scan-btn').onclick = () => {
-        const readerDiv = document.getElementById('reader');
-        readerDiv.style.display = 'block';
-        html5QrCode.start(
-            { facingMode: "environment" }, 
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                try {
-                    const url = new URL(decodedText);
-                    peerInput.value = url.searchParams.get("target") || decodedText;
-                } catch(e) { peerInput.value = decodedText; }
-                stopScanner();
-            }
-        ).catch(err => alert("Errore fotocamera: " + err));
+        document.getElementById('reader').style.display = 'block';
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+            try { peerInput.value = new URL(text).searchParams.get("target") || text; } 
+            catch { peerInput.value = text; }
+            html5QrCode.stop().then(() => document.getElementById('reader').style.display = 'none');
+        });
     };
-
-    function stopScanner() {
-        html5QrCode.stop().then(() => { document.getElementById('reader').style.display = 'none'; });
-    }
 </script>
-
 </body>
 </html>
