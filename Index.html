@@ -9,19 +9,20 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f4f8; padding: 15px; color: #1a202c; margin: 0; }
-        .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 450px; margin: 10px auto; }
-        .btn { background: #4a90e2; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; width: 100%; cursor: pointer; font-size: 1rem; margin-bottom: 10px; transition: 0.2s; }
-        .btn-send { background: #48bb78; display: none; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; text-align: center; background: #f0f4f8; padding: 15px; color: #1a202c; margin: 0; }
+        .card { background: white; padding: 20px; border-radius: 24px; box-shadow: 0 12px 30px rgba(0,0,0,0.12); max-width: 450px; margin: 10px auto; }
+        .btn { background: #4a90e2; color: white; border: none; padding: 15px; border-radius: 14px; font-weight: bold; width: 100%; cursor: pointer; font-size: 1rem; margin-bottom: 10px; transition: 0.3s; }
+        .btn-send { background: #38a169; display: none; }
         .btn-scan { background: #6c5ce7; }
-        .btn:disabled { background: #cbd5e0; cursor: not-allowed; }
+        .btn:disabled { background: #a0aec0; opacity: 0.7; }
         #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 15px; display: none; background: #000; }
         .progress-container { display: none; margin-top: 20px; text-align: left; }
         .progress-bg { background: #edf2f7; border-radius: 10px; height: 12px; width: 100%; overflow: hidden; margin-top: 8px; }
-        .progress-fill { background: #48bb78; height: 100%; width: 0%; transition: width 0.1s; }
-        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e0; box-sizing: border-box; text-align: center; }
-        #status-msg { font-size: 0.8rem; color: #e53e3e; margin-top: 5px; min-height: 1em; }
-        #download-link { display: block; margin-top: 20px; padding: 15px; background: #d3f9d8; color: #2b8a3e; border-radius: 12px; text-decoration: none; font-weight: bold; }
+        .progress-fill { background: #38a169; height: 100%; width: 0%; transition: width 0.2s; }
+        input[type="text"] { width: 100%; padding: 14px; margin: 10px 0; border-radius: 12px; border: 2px solid #e2e8f0; box-sizing: border-box; text-align: center; font-family: monospace; }
+        #status-msg { font-size: 0.85rem; color: #4a5568; margin-top: 8px; min-height: 1.2em; font-weight: 500; }
+        #download-area { margin-top: 15px; }
+        #download-link { display: block; padding: 15px; background: #c6f6d5; color: #22543d; border-radius: 14px; text-decoration: none; font-weight: bold; border: 1px solid #9ae6b4; }
     </style>
 </head>
 <body>
@@ -29,23 +30,24 @@
     <div class="card">
         <h2>🚀 Touch Share</h2>
         <div id="qrcode"></div>
-        <p>Il tuo ID: <strong id="my-id">Inizializzazione...</strong></p>
+        <p style="font-size: 0.9rem; color: #718096;">ID Ricezione:</p>
+        <p><strong id="my-id" style="word-break: break-all; font-family: monospace;">Connessione al server...</strong></p>
         
         <div id="reader"></div>
         <button id="scan-btn" class="btn btn-scan">📷 1. Scansiona QR</button>
-        <input type="text" id="peer-id-input" placeholder="ID Destinatario">
+        <input type="text" id="peer-id-input" placeholder="Incolla ID o usa QR">
         
-        <hr style="border:0; border-top:1px solid #eee; margin: 15px 0;">
+        <hr style="border:0; border-top:1px solid #edf2f7; margin: 20px 0;">
 
         <button class="btn" onclick="document.getElementById('file-input').click()">📁 2. Scegli File</button>
         <input type="file" id="file-input" hidden>
         
-        <div id="file-info" style="font-size: 0.85rem; margin-bottom: 10px;">Nessun file selezionato</div>
+        <div id="file-info" style="font-size: 0.85rem; margin-bottom: 10px; color: #4a5568;"></div>
         <button id="send-btn" class="btn btn-send">📤 3. Invia Ora</button>
         <div id="status-msg"></div>
 
         <div id="progress-area" class="progress-container">
-            <span id="progress-label">Trasferimento...</span>
+            <span id="progress-label" style="font-size: 0.8rem;">Trasferimento...</span>
             <div class="progress-bg"><div id="progress-fill" class="progress-fill"></div></div>
             <span id="progress-percent" style="font-size: 0.8rem; float: right;">0%</span>
         </div>
@@ -53,12 +55,21 @@
     </div>
 
 <script>
-    // Configurazione ICE per migliorare la connessione su reti mobili
-    const peer = new Peer(null, {
-        debug: 2,
-        config: {'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }, { 'urls': 'stun:global.stun.twilio.com:3478' }]}
-    });
+    // Configurazione ICE robusta per reti diverse (STUN Pubblici)
+    const peerConfig = {
+        config: {
+            'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.services.mozilla.com' }
+            ],
+            'sdpSemantics': 'unified-plan'
+        },
+        debug: 1
+    };
 
+    const peer = new Peer(null, peerConfig);
     const peerInput = document.getElementById("peer-id-input");
     const fileInput = document.getElementById("file-input");
     const sendBtn = document.getElementById("send-btn");
@@ -75,27 +86,29 @@
         new QRCode(document.getElementById("qrcode"), { text: shareUrl, width: 140, height: 140 });
     });
 
-    peer.on('error', err => {
-        statusMsg.innerText = "Errore PeerJS: " + err.type;
-        console.error(err);
-    });
-
-    // RICEZIONE
+    // Gestione Ricezione
     peer.on('connection', conn => {
         let receivedChunks = [];
         let metadata = {};
+        
+        statusMsg.innerText = "Connessione in entrata...";
+
         conn.on('data', data => {
             if (data.type === 'start') {
                 progressArea.style.display = 'block';
                 receivedChunks = [];
                 metadata = { name: data.name, mime: data.mime };
+                statusMsg.innerText = "Ricezione: " + metadata.name;
             } else if (data.type === 'chunk') {
                 receivedChunks.push(data.payload);
-                document.getElementById("progress-fill").style.width = Math.floor((data.current/data.total)*100) + "%";
+                const p = Math.floor((data.current / data.total) * 100);
+                document.getElementById("progress-fill").style.width = p + "%";
+                document.getElementById("progress-percent").innerText = p + "%";
             } else if (data.type === 'end') {
-                const blob = new Blob(receivedChunks, { type: metadata.mime });
+                const blob = new Blob(receivedChunks, { type: metadata.mime || 'application/octet-stream' });
                 showDownload(URL.createObjectURL(blob), metadata.name);
                 progressArea.style.display = 'none';
+                statusMsg.innerText = "File ricevuto!";
                 new Audio('https://actions.google.com/sounds/v1/communication/notification_high_intensity.ogg').play().catch(()=>{});
             }
         });
@@ -104,66 +117,83 @@
     fileInput.onchange = (e) => {
         selectedFile = e.target.files[0];
         if (selectedFile) {
-            document.getElementById("file-info").innerText = "File pronto: " + selectedFile.name;
+            document.getElementById("file-info").innerText = `Pronto: ${selectedFile.name} (${(selectedFile.size/1024/1024).toFixed(2)} MB)`;
             sendBtn.style.display = 'block';
         }
     };
 
-    // INVIO
+    // Gestione Invio
     sendBtn.onclick = () => {
         const targetId = peerInput.value.trim();
-        if (!selectedFile || !targetId) return alert("Inserisci ID o scansiona QR");
+        if (!selectedFile || !targetId) return alert("Manca l'ID del destinatario!");
 
         sendBtn.disabled = true;
         sendBtn.innerText = "Connessione...";
-        statusMsg.innerText = "Tentativo di connessione...";
+        statusMsg.innerText = "Cerco il destinatario su internet...";
 
+        // reliable: true è fondamentale per i file
         const conn = peer.connect(targetId, { reliable: true });
 
-        // Timeout di sicurezza
-        const connectionTimeout = setTimeout(() => {
-            if (sendBtn.disabled && sendBtn.innerText === "Connessione...") {
-                statusMsg.innerText = "Connessione fallita. Riprova (usa stessa Wi-Fi se possibile)";
+        const timeout = setTimeout(() => {
+            if (conn.open === false) {
+                statusMsg.innerText = "Timeout: Destinatario non trovato o rete incompatibile.";
                 sendBtn.disabled = false;
                 sendBtn.innerText = "📤 3. Invia Ora";
+                conn.close();
             }
-        }, 8000);
+        }, 15000);
 
         conn.on('open', () => {
-            clearTimeout(connectionTimeout);
+            clearTimeout(timeout);
             statusMsg.innerText = "Connesso! Invio in corso...";
             sendBtn.innerText = "Inviando...";
             progressArea.style.display = 'block';
             
             let offset = 0;
-            const chunkSize = 16384 * 2;
+            const chunkSize = 16384 * 2; // 32KB
             conn.send({ type: 'start', name: selectedFile.name, mime: selectedFile.type });
 
             const readSlice = () => {
                 if (offset >= selectedFile.size) {
                     conn.send({ type: 'end' });
-                    progressArea.style.display = 'none';
-                    sendBtn.disabled = false;
-                    sendBtn.innerText = "Inviato!";
+                    setTimeout(() => {
+                        progressArea.style.display = 'none';
+                        sendBtn.disabled = false;
+                        sendBtn.innerText = "📤 3. Invia Ora";
+                        statusMsg.innerText = "Inviato con successo!";
+                    }, 500);
                     return;
                 }
 
+                // Gestione congestione rete
                 if (conn.dataChannel.bufferedAmount > 1024 * 1024) {
-                    setTimeout(readSlice, 50);
+                    setTimeout(readSlice, 100);
                     return;
                 }
 
                 const slice = selectedFile.slice(offset, offset + chunkSize);
                 const reader = new FileReader();
                 reader.onload = (ev) => {
-                    conn.send({ type: 'chunk', payload: ev.target.result, current: offset + ev.target.result.byteLength, total: selectedFile.size });
+                    conn.send({ 
+                        type: 'chunk', 
+                        payload: ev.target.result, 
+                        current: offset + ev.target.result.byteLength, 
+                        total: selectedFile.size 
+                    });
                     offset += chunkSize;
-                    document.getElementById("progress-fill").style.width = Math.floor((Math.min(offset, selectedFile.size)/selectedFile.size)*100) + "%";
+                    const p = Math.floor((Math.min(offset, selectedFile.size) / selectedFile.size) * 100);
+                    document.getElementById("progress-fill").style.width = p + "%";
+                    document.getElementById("progress-percent").innerText = p + "%";
                     readSlice();
                 };
                 reader.readAsArrayBuffer(slice);
             };
             readSlice();
+        });
+
+        conn.on('error', (err) => {
+            statusMsg.innerText = "Errore di connessione.";
+            sendBtn.disabled = false;
         });
     };
 
@@ -174,11 +204,19 @@
     document.getElementById('scan-btn').onclick = () => {
         document.getElementById('reader').style.display = 'block';
         html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
-            try { peerInput.value = new URL(text).searchParams.get("target") || text; } catch { peerInput.value = text; }
+            try { 
+                const url = new URL(text);
+                peerInput.value = url.searchParams.get("target") || text; 
+            } catch { 
+                peerInput.value = text; 
+            }
             html5QrCode.stop().then(() => document.getElementById('reader').style.display = 'none');
-        });
+        }).catch(err => statusMsg.innerText = "Fotocamera non disponibile.");
     };
+
+    // Auto-fill ID da URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('target')) peerInput.value = urlParams.get('target');
 </script>
 </body>
 </html>
- 
